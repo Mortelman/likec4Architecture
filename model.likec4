@@ -1,0 +1,55 @@
+model {
+    customer = actor 'Пользователь'
+
+    admin = actor 'Админ'
+
+    store = system 'Онлайн магазин' {
+        
+        webapp = container 'веб-приложение' {
+
+        }
+
+        gateway = container 'API Gateway'
+
+        catalog = container 'Каталог' {
+
+        }
+
+        orders = container 'Сервис заказов' {
+
+        }
+
+        notifications = container 'Сервис оповещений' {
+
+        }
+
+        manager = container 'Менеджер пользователей'
+
+        orders_db = database 'База данных заказов'
+
+        products_db = database 'База данных товаров'
+
+        users_db = database 'База данных пользователей'
+
+    }
+
+    email = external 'Провайдер электронной почты'
+
+    payment = external 'Система оплаты'
+
+    customer -> store.webapp
+    admin -> store.gateway
+
+    store.webapp  -[normal]-> store.gateway
+    store.gateway -[normal]-> store.catalog
+    store.gateway -[normal]-> store.orders
+    store.gateway -[normal]-> manager
+    store.catalog -[normal]-> store.products_db
+    store.orders -[normal]-> store.orders_db
+    store.manager -[normal]-> store.users_db
+    store.orders -[normal]-> store.notifications
+    store.catalog -[normal]-> store.notifications
+
+    store.orders -> payment
+    store.notifications -> email
+}

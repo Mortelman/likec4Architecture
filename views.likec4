@@ -1,0 +1,12 @@
+views {
+    view landscape {
+        title 'System Landscape'
+        include  *
+    }
+
+    view containers of store {
+        title 'Online Store - Containers'
+        include *
+
+    }
+}
