@@ -1,0 +1,31 @@
+services:
+  users-service:
+    build: ./users-service
+    ports:
+      - "8080:8080"
+    # Нет зависимостей — полностью независимый сервис
+
+  orders-service:
+    build: ./orders-service
+    ports:
+      - "8000:8000"
+    environment:
+      # Ключевой момент: обращаемся по имени сервиса "users-service"
+      # Это работает благодаря встроенному DNS Docker Compose
+      USERS_SERVICE_URL: http://users-service:8080
+    depends_on:
+      - users-service
+
+  # Swagger UI для просмотра контрактов
+  swagger-ui:
+    image: swaggerapi/swagger-ui
+    ports:
+      - "8090:8080"
+    environment:
+      URLS: |
+        [
+          {"url": "/specs/users.yaml", "name": "Users API"},
+          {"url": "/specs/orders.yaml", "name": "Orders API"}
+        ]
+    volumes:
+      - ./api:/usr/share/nginx/html/specs:ro

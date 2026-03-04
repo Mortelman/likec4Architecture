@@ -1,0 +1,77 @@
+services:
+  # ─── Users Service (Go) ───────────────────────────────────────────
+  users-service:
+    build: ./users-service
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://${USERS_DB_USER:-postgres}:${USERS_DB_PASSWORD:-postgres}@users-db:5432/${USERS_DB_NAME:-users_db}?sslmode=disable
+    depends_on:
+      users-db:
+        condition: service_healthy  # Ждём полной готовности БД
+
+  users-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${USERS_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${USERS_DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${USERS_DB_NAME:-users_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - users_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${USERS_DB_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─── Orders Service (Python) ──────────────────────────────────────
+  orders-service:
+    build: ./orders-service
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://${ORDERS_DB_USER:-postgres}:${ORDERS_DB_PASSWORD:-postgres}@orders-db:5432/${ORDERS_DB_NAME:-orders_db}
+      # Обращаемся к users-service по имени сервиса в Docker сети
+      USERS_SERVICE_URL: http://users-service:8080
+    depends_on:
+      orders-db:
+        condition: service_healthy
+      users-service:
+        condition: service_started
+
+  orders-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${ORDERS_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${ORDERS_DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${ORDERS_DB_NAME:-orders_db}
+    ports:
+      - "5433:5432"   # Другой порт на хосте, т.к. 5432 занят users-db
+    volumes:
+      - orders_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ORDERS_DB_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─── Swagger UI ───────────────────────────────────────────────────
+  swagger-ui:
+    image: swaggerapi/swagger-ui
+    ports:
+      - "8090:8080"
+    environment:
+      URLS: |
+        [
+          {"url": "/specs/users.yaml", "name": "Users API"},
+          {"url": "/specs/orders.yaml", "name": "Orders API"}
+        ]
+      URLS_PRIMARY_NAME: "Users API"
+    volumes:
+      - ./api:/usr/share/nginx/html/specs:ro
+
+volumes:
+  users_db_data:
+  orders_db_data:

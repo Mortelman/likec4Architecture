@@ -1,0 +1,1439 @@
+openapi: 3.1.0
+info:
+  contact:
+    name: Степан Фокин
+  description: |
+    API для маркетплейса с полной бизнес-логикой:
+    - Управление товарами (CRUD)
+    - Управление заказами с валидацией
+    - Промокоды и скидки
+    - Аутентификация и авторизация (JWT)
+    - Ролевая модель доступа (USER, SELLER, ADMIN)
+  title: Маркетплейс API
+  version: 1.0.0
+servers:
+- description: Локальное окружение разработки
+  url: http://localhost:8080/api/v1
+- description: Продакшн
+  url: https://api.marketplace.example.com/v1
+tags:
+- description: Управление товарами в каталоге
+  name: products
+- description: Управление заказами пользователей
+  name: orders
+- description: Управление промокодами и скидками
+  name: promo-codes
+- description: Аутентификация и авторизация
+  name: auth
+- description: Управление пользователями
+  name: users
+paths:
+  /products:
+    get:
+      description: |
+        Возвращает список товаров с поддержкой пагинации и фильтрации.
+        Доступно для всех ролей (USER, SELLER, ADMIN).
+      operationId: getProducts
+      parameters:
+      - description: Номер страницы (начиная с 0)
+        example: 0
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 0
+          minimum: 0
+          type: integer
+        style: form
+      - description: Размер страницы
+        example: 20
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 20
+          maximum: 100
+          minimum: 1
+          type: integer
+        style: form
+      - description: Фильтр по статусу товара
+        example: ACTIVE
+        explode: true
+        in: query
+        name: status
+        required: false
+        schema:
+          $ref: "#/components/schemas/ProductStatus"
+        style: form
+      - description: Фильтр по категории (точное совпадение)
+        example: Электроника
+        explode: true
+        in: query
+        name: category
+        required: false
+        schema:
+          maxLength: 100
+          minLength: 1
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductPageResponse"
+          description: Список товаров с метаданными пагинации
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Ошибка валидации параметров
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Необходима аутентификация
+      security:
+      - bearerAuth: []
+      summary: Получить список товаров с пагинацией и фильтрацией
+      tags:
+      - products
+    post:
+      description: |
+        Создаёт новый товар в каталоге.
+        - USER: запрещено (403)
+        - SELLER: только свои товары (автоматически привязывается к текущему продавцу)
+        - ADMIN: может создавать товары для любого продавца
+      operationId: createProduct
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductCreateRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductResponse"
+          description: Товар успешно создан
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Ошибка валидации данных
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Необходима аутентификация
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Недостаточно прав
+      security:
+      - bearerAuth: []
+      summary: Создать новый товар
+      tags:
+      - products
+  /products/{id}:
+    delete:
+      description: |
+        Переводит товар в статус ARCHIVED (мягкое удаление).
+        - USER: запрещено (403)
+        - SELLER: только свои товары
+        - ADMIN: любые товары
+      operationId: softDeleteProduct
+      parameters:
+      - description: Уникальный идентификатор товара
+        example: 550e8400-e29b-41d4-a716-446655440000
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: Товар успешно переведён в статус ARCHIVED
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Необходима аутентификация
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Недостаточно прав
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Товар не найден
+      security:
+      - bearerAuth: []
+      summary: Мягкое удаление товара
+      tags:
+      - products
+    get:
+      description: |
+        Возвращает детальную информацию о товаре.
+        Доступно для всех ролей (USER, SELLER, ADMIN).
+      operationId: getProductById
+      parameters:
+      - description: Уникальный идентификатор товара
+        example: 550e8400-e29b-41d4-a716-446655440000
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductResponse"
+          description: Товар найден
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Необходима аутентификация
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Товар не найден
+      security:
+      - bearerAuth: []
+      summary: Получить товар по ID
+      tags:
+      - products
+    put:
+      description: |
+        Полностью заменяет данные товара.
+        - USER: запрещено (403)
+        - SELLER: только свои товары
+        - ADMIN: любые товары
+      operationId: updateProduct
+      parameters:
+      - description: Уникальный идентификатор товара
+        example: 550e8400-e29b-41d4-a716-446655440000
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductUpdateRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductResponse"
+          description: Товар успешно обновлён
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Ошибка валидации данных
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Необходима аутентификация
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Недостаточно прав
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Товар не найден
+      security:
+      - bearerAuth: []
+      summary: Обновить товар
+      tags:
+      - products
+  /orders:
+    post:
+      description: |
+        Создаёт новый заказ с валидацией бизнес-правил:
+        1. Ограничение частоты создания (последняя операция CREATE_ORDER)
+        2. Проверка активных заказов (состояния CREATED, PAYMENT_PENDING)
+        3. Проверка каталога (товары существуют и ACTIVE)
+        4. Проверка остатков (stock >= quantity)
+        5. Резервирование остатков
+        6. Снапшот цен (price_at_order)
+        7. Расчёт стоимости с учётом промокода
+        8. Фиксация операции в user_operations
+
+        - USER: разрешено
+        - SELLER: запрещено (403)
+        - ADMIN: разрешено
+      operationId: createOrder
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderCreateRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+          description: Заказ успешно создан
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Ошибка валидации данных
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Необходима аутентификация
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Недостаточно прав
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Товар не найден
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: "Бизнес-ошибка (активный заказ, недостаточно товара, недопу\
+            стимый статус)"
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Ошибка промокода
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Превышен лимит частоты создания заказа
+      security:
+      - bearerAuth: []
+      summary: Создать новый заказ
+      tags:
+      - orders
+  /orders/{id}:
+    get:
+      description: |
+        Возвращает детальную информацию о заказе.
+        - USER: только свои заказы
+        - SELLER: запрещено (403)
+        - ADMIN: любые заказы
+      operationId: getOrderById
+      parameters:
+      - description: Уникальный идентификатор заказа
+        example: 550e8400-e29b-41d4-a716-446655440001
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+          description: Заказ найден
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Необходима аутентификация
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Недостаточно прав (заказ принадлежит другому пользователю)
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Заказ не найден
+      security:
+      - bearerAuth: []
+      summary: Получить заказ по ID
+      tags:
+      - orders
+    put:
+      description: |
+        Обновляет позиции в заказе (только в состоянии CREATED).
+        Выполняет те же проверки, что при создании:
+        1. Проверка владельца
+        2. Проверка состояния (только CREATED)
+        3. Ограничение частоты обновления
+        4. Возврат предыдущих остатков
+        5. Проверка и резервирование новых позиций
+        6. Пересчёт стоимости (включая промокод)
+        7. Фиксация операции UPDATE_ORDER
+
+        - USER: только свои заказы
+        - SELLER: запрещено (403)
+        - ADMIN: любые заказы
+      operationId: updateOrder
+      parameters:
+      - description: Уникальный идентификатор заказа
+        example: 550e8400-e29b-41d4-a716-446655440001
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderUpdateRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+          description: Заказ успешно обновлён
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Ошибка валидации данных
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Необходима аутентификация
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Недостаточно прав
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Заказ не найден
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Бизнес-ошибка (недопустимый переход состояния)
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Превышен лимит частоты обновления заказа
+      security:
+      - bearerAuth: []
+      summary: Обновить заказ
+      tags:
+      - orders
+  /orders/{id}/cancel:
+    post:
+      description: |
+        Отменяет заказ (переводит в состояние CANCELED).
+        - USER: только свои заказы
+        - SELLER: запрещено (403)
+        - ADMIN: любые заказы
+
+        Проверки:
+        1. Проверка владельца
+        2. Проверка состояния (только CREATED, PAYMENT_PENDING)
+        3. Возврат остатков
+        4. Возврат использования промокода (если был применён)
+      operationId: cancelOrder
+      parameters:
+      - description: Уникальный идентификатор заказа
+        example: 550e8400-e29b-41d4-a716-446655440001
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: Заказ успешно отменён
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Необходима аутентификация
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Недостаточно прав
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Заказ не найден
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Недопустимый переход состояния
+      security:
+      - bearerAuth: []
+      summary: Отменить заказ
+      tags:
+      - orders
+  /promo-codes:
+    post:
+      description: |
+        Создаёт новый промокод для скидок.
+        - USER: запрещено (403)
+        - SELLER: разрешено (свои промокоды)
+        - ADMIN: разрешено
+      operationId: createPromoCode
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromoCodeCreateRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromoCodeResponse"
+          description: Промокод успешно создан
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Ошибка валидации данных
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Необходима аутентификация
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Недостаточно прав
+      security:
+      - bearerAuth: []
+      summary: Создать промокод
+      tags:
+      - promo-codes
+  /auth/register:
+    post:
+      description: Создаёт нового пользователя в системе.
+      operationId: registerUser
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserRegisterRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+          description: Пользователь успешно зарегистрирован
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Ошибка валидации данных
+      summary: Регистрация пользователя
+      tags:
+      - auth
+  /auth/login:
+    post:
+      description: Возвращает access и refresh токены.
+      operationId: loginUser
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserLoginRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+          description: Успешная аутентификация
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Ошибка валидации данных
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Неверные учётные данные
+      summary: Аутентификация пользователя
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      description: Обновляет access token по refresh token.
+      operationId: refreshToken
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+          description: Токены успешно обновлены
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Ошибка валидации данных
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Невалидный или просроченный refresh token
+      summary: Обновить access token
+      tags:
+      - auth
+components:
+  schemas:
+    ProductStatus:
+      description: Статус товара в каталоге
+      enum:
+      - ACTIVE
+      - INACTIVE
+      - ARCHIVED
+      type: string
+    OrderStatus:
+      description: Статус заказа
+      enum:
+      - CREATED
+      - PAYMENT_PENDING
+      - PAID
+      - SHIPPED
+      - COMPLETED
+      - CANCELED
+      type: string
+    DiscountType:
+      description: Тип скидки промокода
+      enum:
+      - PERCENTAGE
+      - FIXED_AMOUNT
+      type: string
+    UserRole:
+      description: Роль пользователя в системе
+      enum:
+      - USER
+      - SELLER
+      - ADMIN
+      type: string
+    OperationType:
+      description: Тип операции пользователя
+      enum:
+      - CREATE_ORDER
+      - UPDATE_ORDER
+      type: string
+    ErrorCode:
+      description: Коды ошибок для контрактной обработки
+      enum:
+      - PRODUCT_NOT_FOUND
+      - PRODUCT_INACTIVE
+      - ORDER_NOT_FOUND
+      - ORDER_LIMIT_EXCEEDED
+      - ORDER_HAS_ACTIVE
+      - INVALID_STATE_TRANSITION
+      - INSUFFICIENT_STOCK
+      - PROMO_CODE_INVALID
+      - PROMO_CODE_MIN_AMOUNT
+      - ORDER_OWNERSHIP_VIOLATION
+      - VALIDATION_ERROR
+      - TOKEN_EXPIRED
+      - TOKEN_INVALID
+      - REFRESH_TOKEN_INVALID
+      - ACCESS_DENIED
+      type: string
+    ProductCreateRequest:
+      example:
+        price: 59990.0
+        name: Смартфон XYZ Pro
+        description: Флагманский смартфон с 6.7" AMOLED дисплеем
+        stock: 42
+        category: Электроника
+        status: ACTIVE
+      properties:
+        name:
+          description: Название товара
+          example: Смартфон XYZ Pro
+          maxLength: 255
+          minLength: 1
+          type: string
+        description:
+          description: Описание товара (опционально)
+          example: Флагманский смартфон с 6.7" AMOLED дисплеем
+          maxLength: 4000
+          type: string
+          nullable: true
+        price:
+          description: Цена товара в рублях (> 0)
+          example: 59990.0
+          format: double
+          minimum: 0.01
+          type: number
+        stock:
+          description: Остаток на складе (>= 0)
+          example: 42
+          minimum: 0
+          type: integer
+        category:
+          description: Категория товара
+          example: Электроника
+          maxLength: 100
+          minLength: 1
+          type: string
+        status:
+          $ref: "#/components/schemas/ProductStatus"
+      required:
+      - category
+      - name
+      - price
+      - status
+      - stock
+    ProductUpdateRequest:
+      example:
+        price: 64990.0
+        name: Смартфон XYZ Pro (обновлённая модель)
+        description: Обновлённый флагман с улучшенной камерой
+        stock: 35
+        category: Электроника
+        status: ACTIVE
+      properties:
+        name:
+          description: Название товара
+          example: Смартфон XYZ Pro (обновлённая модель)
+          maxLength: 255
+          minLength: 1
+          type: string
+        description:
+          description: Описание товара (опционально)
+          example: Обновлённый флагман с улучшенной камерой
+          maxLength: 4000
+          type: string
+          nullable: true
+        price:
+          description: Цена товара в рублях (> 0)
+          example: 64990.0
+          format: double
+          minimum: 0.01
+          type: number
+        stock:
+          description: Остаток на складе (>= 0)
+          example: 35
+          minimum: 0
+          type: integer
+        category:
+          description: Категория товара
+          example: Электроника
+          maxLength: 100
+          minLength: 1
+          type: string
+        status:
+          $ref: "#/components/schemas/ProductStatus"
+      required:
+      - category
+      - name
+      - price
+      - status
+      - stock
+    ProductResponse:
+      example:
+        updated_at: 2024-03-04T14:22:15Z
+        price: 59990.0
+        name: Смартфон XYZ Pro
+        description: Флагманский смартфон с 6.7" AMOLED дисплеем
+        created_at: 2024-03-04T10:15:30Z
+        id: 550e8400-e29b-41d4-a716-446655440000
+        stock: 42
+        category: Электроника
+        seller_id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+        status: ACTIVE
+      properties:
+        id:
+          description: Уникальный идентификатор товара
+          example: 550e8400-e29b-41d4-a716-446655440000
+          format: uuid
+          readOnly: true
+          type: string
+        name:
+          description: Название товара
+          example: Смартфон XYZ Pro
+          type: string
+        description:
+          description: Описание товара
+          example: Флагманский смартфон с 6.7" AMOLED дисплеем
+          type: string
+          nullable: true
+        price:
+          description: Цена товара в рублях
+          example: 59990.0
+          format: double
+          type: number
+        stock:
+          description: Остаток на складе
+          example: 42
+          type: integer
+        category:
+          description: Категория товара
+          example: Электроника
+          type: string
+        status:
+          $ref: "#/components/schemas/ProductStatus"
+        seller_id:
+          description: "ID продавца, которому принадлежит товар"
+          example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+          format: uuid
+          type: string
+        created_at:
+          description: Время создания товара
+          example: 2024-03-04T10:15:30Z
+          format: date-time
+          readOnly: true
+          type: string
+        updated_at:
+          description: Время последнего обновления товара
+          example: 2024-03-04T14:22:15Z
+          format: date-time
+          readOnly: true
+          type: string
+      required:
+      - category
+      - created_at
+      - id
+      - name
+      - price
+      - seller_id
+      - status
+      - stock
+      - updated_at
+    ProductPageResponse:
+      example:
+        pageNumber: 0
+        totalPages: 8
+        pageSize: 20
+        content:
+        - updated_at: 2024-03-04T14:22:15Z
+          price: 59990.0
+          name: Смартфон XYZ Pro
+          description: Флагманский смартфон с 6.7" AMOLED дисплеем
+          created_at: 2024-03-04T10:15:30Z
+          id: 550e8400-e29b-41d4-a716-446655440000
+          stock: 42
+          category: Электроника
+          seller_id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+          status: ACTIVE
+        - updated_at: 2024-03-04T14:22:15Z
+          price: 59990.0
+          name: Смартфон XYZ Pro
+          description: Флагманский смартфон с 6.7" AMOLED дисплеем
+          created_at: 2024-03-04T10:15:30Z
+          id: 550e8400-e29b-41d4-a716-446655440000
+          stock: 42
+          category: Электроника
+          seller_id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+          status: ACTIVE
+        totalElements: 150
+      properties:
+        content:
+          description: Список товаров на текущей странице
+          items:
+            $ref: "#/components/schemas/ProductResponse"
+          type: array
+        totalElements:
+          description: Общее количество товаров
+          example: 150
+          minimum: 0
+          type: integer
+        pageNumber:
+          description: Номер текущей страницы (начиная с 0)
+          example: 0
+          minimum: 0
+          type: integer
+        pageSize:
+          description: Размер страницы
+          example: 20
+          minimum: 1
+          type: integer
+        totalPages:
+          description: Общее количество страниц
+          example: 8
+          minimum: 0
+          type: integer
+      required:
+      - content
+      - pageNumber
+      - pageSize
+      - totalElements
+    OrderItemCreate:
+      example:
+        quantity: 2
+        product_id: 550e8400-e29b-41d4-a716-446655440000
+      properties:
+        product_id:
+          description: ID товара
+          example: 550e8400-e29b-41d4-a716-446655440000
+          format: uuid
+          type: string
+        quantity:
+          description: Количество единиц товара
+          example: 2
+          maximum: 999
+          minimum: 1
+          type: integer
+      required:
+      - product_id
+      - quantity
+    OrderItemResponse:
+      example:
+        quantity: 2
+        product_id: 550e8400-e29b-41d4-a716-446655440000
+        price_at_order: 59990.0
+        id: 660e8400-e29b-41d4-a716-446655440002
+      properties:
+        id:
+          description: Уникальный идентификатор позиции
+          example: 660e8400-e29b-41d4-a716-446655440002
+          format: uuid
+          readOnly: true
+          type: string
+        product_id:
+          description: ID товара
+          example: 550e8400-e29b-41d4-a716-446655440000
+          format: uuid
+          type: string
+        quantity:
+          description: Количество единиц товара
+          example: 2
+          type: integer
+        price_at_order:
+          description: Цена за единицу на момент заказа (снапшот)
+          example: 59990.0
+          format: double
+          type: number
+      required:
+      - id
+      - price_at_order
+      - product_id
+      - quantity
+    OrderCreateRequest:
+      example:
+        promo_code: WINTER2024
+        items:
+        - quantity: 2
+          product_id: 550e8400-e29b-41d4-a716-446655440000
+        - quantity: 2
+          product_id: 550e8400-e29b-41d4-a716-446655440000
+        - quantity: 2
+          product_id: 550e8400-e29b-41d4-a716-446655440000
+        - quantity: 2
+          product_id: 550e8400-e29b-41d4-a716-446655440000
+        - quantity: 2
+          product_id: 550e8400-e29b-41d4-a716-446655440000
+      properties:
+        items:
+          description: Список позиций заказа
+          items:
+            $ref: "#/components/schemas/OrderItemCreate"
+          maxItems: 50
+          minItems: 1
+          type: array
+        promo_code:
+          description: Промокод (опционально)
+          example: WINTER2024
+          pattern: "^[A-Z0-9_]{4,20}$"
+          type: string
+      required:
+      - items
+    OrderUpdateRequest:
+      example:
+        items:
+        - quantity: 2
+          product_id: 550e8400-e29b-41d4-a716-446655440000
+        - quantity: 2
+          product_id: 550e8400-e29b-41d4-a716-446655440000
+        - quantity: 2
+          product_id: 550e8400-e29b-41d4-a716-446655440000
+        - quantity: 2
+          product_id: 550e8400-e29b-41d4-a716-446655440000
+        - quantity: 2
+          product_id: 550e8400-e29b-41d4-a716-446655440000
+      properties:
+        items:
+          description: Новый список позиций заказа
+          items:
+            $ref: "#/components/schemas/OrderItemCreate"
+          maxItems: 50
+          minItems: 1
+          type: array
+      required:
+      - items
+    OrderResponse:
+      example:
+        promo_code_id: c1b2c3d4-e5f6-7890-abcd-ef1234567892
+        updated_at: 2024-03-04T15:30:00Z
+        user_id: b1b2c3d4-e5f6-7890-abcd-ef1234567891
+        total_amount: 119980.0
+        discount_amount: 0.0
+        created_at: 2024-03-04T15:30:00Z
+        id: 550e8400-e29b-41d4-a716-446655440001
+        items:
+        - quantity: 2
+          product_id: 550e8400-e29b-41d4-a716-446655440000
+          price_at_order: 59990.0
+          id: 660e8400-e29b-41d4-a716-446655440002
+        - quantity: 2
+          product_id: 550e8400-e29b-41d4-a716-446655440000
+          price_at_order: 59990.0
+          id: 660e8400-e29b-41d4-a716-446655440002
+        status: CREATED
+      properties:
+        id:
+          description: Уникальный идентификатор заказа
+          example: 550e8400-e29b-41d4-a716-446655440001
+          format: uuid
+          readOnly: true
+          type: string
+        user_id:
+          description: ID владельца заказа
+          example: b1b2c3d4-e5f6-7890-abcd-ef1234567891
+          format: uuid
+          readOnly: true
+          type: string
+        status:
+          $ref: "#/components/schemas/OrderStatus"
+        promo_code_id:
+          description: ID применённого промокода
+          example: c1b2c3d4-e5f6-7890-abcd-ef1234567892
+          format: uuid
+          type: string
+          nullable: true
+        total_amount:
+          description: Итоговая сумма заказа
+          example: 119980.0
+          format: double
+          type: number
+        discount_amount:
+          description: Сумма скидки
+          example: 0.0
+          format: double
+          type: number
+        items:
+          description: Позиции заказа
+          items:
+            $ref: "#/components/schemas/OrderItemResponse"
+          type: array
+        created_at:
+          description: Время создания заказа
+          example: 2024-03-04T15:30:00Z
+          format: date-time
+          readOnly: true
+          type: string
+        updated_at:
+          description: Время последнего обновления заказа
+          example: 2024-03-04T15:30:00Z
+          format: date-time
+          readOnly: true
+          type: string
+      required:
+      - created_at
+      - discount_amount
+      - id
+      - items
+      - status
+      - total_amount
+      - updated_at
+      - user_id
+    PromoCodeCreateRequest:
+      example:
+        min_order_amount: 5000.0
+        code: SUMMER2024
+        valid_until: 2024-08-31T23:59:59Z
+        max_uses: 100
+        discount_value: 15.0
+        valid_from: 2024-06-01T00:00:00Z
+        discount_type: PERCENTAGE
+      properties:
+        code:
+          description: Уникальный код промоакции
+          example: SUMMER2024
+          maxLength: 20
+          minLength: 4
+          pattern: "^[A-Z0-9_]{4,20}$"
+          type: string
+        discount_type:
+          $ref: "#/components/schemas/DiscountType"
+        discount_value:
+          description: Значение скидки (процент или фиксированная сумма)
+          example: 15.0
+          format: double
+          minimum: 0.01
+          type: number
+        min_order_amount:
+          description: Минимальная сумма заказа для применения
+          example: 5000.0
+          format: double
+          minimum: 0
+          type: number
+        max_uses:
+          description: Максимальное количество использований
+          example: 100
+          minimum: 1
+          type: integer
+        valid_from:
+          description: Начало срока действия
+          example: 2024-06-01T00:00:00Z
+          format: date-time
+          type: string
+        valid_until:
+          description: Окончание срока действия
+          example: 2024-08-31T23:59:59Z
+          format: date-time
+          type: string
+      required:
+      - code
+      - discount_type
+      - discount_value
+      - max_uses
+      - min_order_amount
+      - valid_from
+      - valid_until
+    PromoCodeResponse:
+      example:
+        min_order_amount: 5000.0
+        code: SUMMER2024
+        valid_until: 2024-08-31T23:59:59Z
+        max_uses: 100
+        discount_value: 15.0
+        valid_from: 2024-06-01T00:00:00Z
+        active: true
+        created_at: 2024-03-04T16:00:00Z
+        id: c1b2c3d4-e5f6-7890-abcd-ef1234567892
+        discount_type: PERCENTAGE
+        current_uses: 0
+      properties:
+        id:
+          description: Уникальный идентификатор
+          example: c1b2c3d4-e5f6-7890-abcd-ef1234567892
+          format: uuid
+          readOnly: true
+          type: string
+        code:
+          description: Уникальный код промоакции
+          example: SUMMER2024
+          type: string
+        discount_type:
+          $ref: "#/components/schemas/DiscountType"
+        discount_value:
+          description: Значение скидки
+          example: 15.0
+          format: double
+          type: number
+        min_order_amount:
+          description: Минимальная сумма заказа
+          example: 5000.0
+          format: double
+          type: number
+        max_uses:
+          description: Максимальное количество использований
+          example: 100
+          type: integer
+        current_uses:
+          description: Текущее количество использований
+          example: 0
+          readOnly: true
+          type: integer
+        valid_from:
+          description: Начало срока действия
+          example: 2024-06-01T00:00:00Z
+          format: date-time
+          type: string
+        valid_until:
+          description: Окончание срока действия
+          example: 2024-08-31T23:59:59Z
+          format: date-time
+          type: string
+        active:
+          description: Активен ли промокод
+          example: true
+          type: boolean
+        created_at:
+          description: Время создания
+          example: 2024-03-04T16:00:00Z
+          format: date-time
+          readOnly: true
+          type: string
+      required:
+      - active
+      - code
+      - created_at
+      - current_uses
+      - discount_type
+      - discount_value
+      - id
+      - max_uses
+      - min_order_amount
+      - valid_from
+      - valid_until
+    UserRegisterRequest:
+      example:
+        password: SecurePass123
+        role: USER
+        email: user@example.com
+      properties:
+        email:
+          description: Email пользователя
+          example: user@example.com
+          format: email
+          maxLength: 255
+          minLength: 5
+          type: string
+        password:
+          description: Пароль (минимум 8 символов)
+          example: SecurePass123
+          maxLength: 255
+          minLength: 8
+          type: string
+        role:
+          $ref: "#/components/schemas/UserRole"
+      required:
+      - email
+      - password
+      - role
+    UserLoginRequest:
+      example:
+        password: SecurePass123
+        email: user@example.com
+      properties:
+        email:
+          description: Email пользователя
+          example: user@example.com
+          format: email
+          type: string
+        password:
+          description: Пароль
+          example: SecurePass123
+          type: string
+      required:
+      - email
+      - password
+    RefreshTokenRequest:
+      example:
+        refresh_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+      properties:
+        refresh_token:
+          description: Refresh token для обновления access token
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+          type: string
+      required:
+      - refresh_token
+    UserResponse:
+      example:
+        role: USER
+        created_at: 2024-03-04T10:00:00Z
+        id: b1b2c3d4-e5f6-7890-abcd-ef1234567891
+        email: user@example.com
+      properties:
+        id:
+          description: Уникальный идентификатор пользователя
+          example: b1b2c3d4-e5f6-7890-abcd-ef1234567891
+          format: uuid
+          readOnly: true
+          type: string
+        email:
+          description: Email пользователя
+          example: user@example.com
+          format: email
+          type: string
+        role:
+          $ref: "#/components/schemas/UserRole"
+        created_at:
+          description: Время создания аккаунта
+          example: 2024-03-04T10:00:00Z
+          format: date-time
+          readOnly: true
+          type: string
+      required:
+      - created_at
+      - email
+      - id
+      - role
+    AuthResponse:
+      example:
+        access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        refresh_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        user:
+          role: USER
+          created_at: 2024-03-04T10:00:00Z
+          id: b1b2c3d4-e5f6-7890-abcd-ef1234567891
+          email: user@example.com
+      properties:
+        access_token:
+          description: JWT access token (15-30 минут)
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+          type: string
+        refresh_token:
+          description: JWT refresh token (7-30 дней)
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+          type: string
+        user:
+          $ref: "#/components/schemas/UserResponse"
+      required:
+      - access_token
+      - refresh_token
+      - user
+    ErrorDetail:
+      additionalProperties:
+        type: string
+      description: Дополнительные данные об ошибке
+      example:
+        field: price
+        value: "-100"
+        constraint: must be > 0
+    ErrorResponse:
+      example:
+        error_code: PRODUCT_NOT_FOUND
+        details:
+          field: price
+          value: "-100"
+          constraint: must be > 0
+        message: Product not found
+        timestamp: 2024-03-04T14:30:00Z
+      properties:
+        error_code:
+          $ref: "#/components/schemas/ErrorCode"
+        message:
+          description: Человекочитаемое описание ошибки
+          example: Product not found
+          type: string
+        details:
+          additionalProperties:
+            type: string
+          description: Дополнительные данные об ошибке
+          example:
+            field: price
+            value: "-100"
+            constraint: must be > 0
+        timestamp:
+          description: Время возникновения ошибки
+          example: 2024-03-04T14:30:00Z
+          format: date-time
+          type: string
+      required:
+      - error_code
+      - message
+      - timestamp
+  securitySchemes:
+    bearerAuth:
+      bearerFormat: JWT
+      description: |-
+        JWT access token для аутентификации.
+        Формат: "Bearer {access_token}"
+
+        Роли в токене (claim "role"):
+        - USER: обычный покупатель
+        - SELLER: продавец (может управлять товарами)
+        - ADMIN: администратор (полный доступ)
+      scheme: bearer
+      type: http

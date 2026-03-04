@@ -1,0 +1,18 @@
+services:
+  # Простой веб-сервер nginx
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      # Монтируем нашу HTML страницу
+      - ./html:/usr/share/nginx/html:ro
+
+  # Сервис whoami: показывает информацию о запросе и хосте
+  # Удобен для демонстрации балансировки нагрузки и сетевого взаимодействия
+  whoami:
+    image: traefik/whoami
+    ports:
+      - "8081:80"
+    environment:
+      - WHOAMI_NAME=docker-compose-demo

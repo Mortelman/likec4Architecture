@@ -1,0 +1,442 @@
+openapi: 3.0.3
+
+info:
+  title: Маркетплейс API
+  description: API для управления товарами в маркетплейсе
+  version: 1.0.0
+  contact:
+    name: Степан Фокин
+    email: stepan@example.com
+
+servers:
+  - url: https://api.marketplace.local/v1
+    description: Локальное окружение разработки
+  - url: https://api.marketplace.example.com/v1
+    description: Продакшн
+
+tags:
+  - name: products
+    description: Управление товарами в каталоге
+
+paths:
+  /products:
+    get:
+      tags:
+        - products
+      summary: Получить список товаров с пагинацией и фильтрацией
+      description: |
+        Возвращает список товаров с поддержкой пагинации и фильтрации по статусу и категории.
+        По умолчанию возвращает 20 товаров на странице.
+      operationId: getProducts
+      parameters:
+        - name: page
+          in: query
+          description: Номер страницы (начиная с 0)
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          example: 0
+        - name: size
+          in: query
+          description: Размер страницы
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+        - name: status
+          in: query
+          description: Фильтр по статусу товара
+          required: false
+          schema:
+            $ref: '#/components/schemas/ProductStatus'
+          example: ACTIVE
+        - name: category
+          in: query
+          description: Фильтр по категории (точное совпадение)
+          required: false
+          schema:
+            type: string
+          example: "Электроника"
+      responses:
+        '200':
+          description: Список товаров с метаданными пагинации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductPage'
+        '400':
+          description: Некорректные параметры запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - products
+      summary: Создать новый товар
+      description: Добавляет новый товар в каталог. Доступно только для продавцов и администраторов.
+      operationId: createProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductCreateRequest'
+      responses:
+        '201':
+          description: Товар успешно создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          description: Некорректные данные товара
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Необходима аутентификация
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Недостаточно прав (только продавцы/админы)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /products/{id}:
+    get:
+      tags:
+        - products
+      summary: Получить товар по ID
+      description: Возвращает детальную информацию о товаре по его уникальному идентификатору.
+      operationId: getProductById
+      parameters:
+        - name: id
+          in: path
+          description: Уникальный идентификатор товара (UUID)
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Товар найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          description: Товар не найден или удалён (статус ARCHIVED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags:
+        - products
+      summary: Обновить товар
+      description: Полностью заменяет данные товара. Доступно только владельцу товара (продавцу) и администраторам.
+      operationId: updateProduct
+      parameters:
+        - name: id
+          in: path
+          description: Уникальный идентификатор товара (UUID)
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductUpdateRequest'
+      responses:
+        '200':
+          description: Товар успешно обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          description: Некорректные данные товара
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Недостаточно прав (только владелец/админ)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Товар не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - products
+      summary: Мягкое удаление товара
+      description: |
+        Переводит товар в статус ARCHIVED (мягкое удаление).
+        Товар остаётся в базе данных, но не отображается в каталоге.
+        Доступно только владельцу товара (продавцу) и администраторам.
+      operationId: softDeleteProduct
+      parameters:
+        - name: id
+          in: path
+          description: Уникальный идентификатор товара (UUID)
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '204':
+          description: Товар успешно переведён в статус ARCHIVED
+        '403':
+          description: Недостаточно прав (только владелец/админ)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Товар не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    ProductStatus:
+      type: string
+      enum:
+        - ACTIVE
+        - INACTIVE
+        - ARCHIVED
+      description: Статус товара в каталоге
+      example: ACTIVE
+
+    Product:
+      type: object
+      required:
+        - id
+        - name
+        - price
+        - category
+        - status
+        - stock
+        - sellerId
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Уникальный идентификатор товара
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        name:
+          type: string
+          description: Название товара
+          example: "Смартфон XYZ Pro"
+        description:
+          type: string
+          description: Описание товара
+          example: "Флагманский смартфон с 6.7\" AMOLED дисплеем"
+        price:
+          type: number
+          format: float
+          minimum: 0
+          description: Цена товара в рублях
+          example: 59990.00
+        category:
+          type: string
+          description: Категория товара (точное совпадение для фильтрации)
+          example: "Электроника"
+        status:
+          $ref: '#/components/schemas/ProductStatus'
+        stock:
+          type: integer
+          minimum: 0
+          description: Остаток на складе
+          example: 42
+        sellerId:
+          type: string
+          format: uuid
+          description: ID продавца, которому принадлежит товар
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        createdAt:
+          type: string
+          format: date-time
+          description: Дата и время создания товара
+          example: "2024-03-04T10:15:30Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Дата и время последнего обновления товара
+          example: "2024-03-04T14:22:15Z"
+
+    ProductCreateRequest:
+      type: object
+      required:
+        - name
+        - price
+        - category
+        - stock
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Название товара
+          example: "Смартфон XYZ Pro"
+        description:
+          type: string
+          maxLength: 2000
+          description: Описание товара (опционально)
+          example: "Флагманский смартфон с 6.7\" AMOLED дисплеем"
+        price:
+          type: number
+          format: float
+          minimum: 0.01
+          description: Цена товара в рублях
+          example: 59990.00
+        category:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Категория товара
+          example: "Электроника"
+        stock:
+          type: integer
+          minimum: 0
+          description: Остаток на складе
+          example: 42
+
+    ProductUpdateRequest:
+      type: object
+      required:
+        - name
+        - price
+        - category
+        - stock
+        - status
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Название товара
+          example: "Смартфон XYZ Pro (обновлённая модель)"
+        description:
+          type: string
+          maxLength: 2000
+          description: Описание товара (опционально)
+          example: "Обновлённый флагман с улучшенной камерой"
+        price:
+          type: number
+          format: float
+          minimum: 0.01
+          description: Цена товара в рублях
+          example: 64990.00
+        category:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Категория товара
+          example: "Электроника"
+        stock:
+          type: integer
+          minimum: 0
+          description: Остаток на складе
+          example: 35
+        status:
+          $ref: '#/components/schemas/ProductStatus'
+
+    ProductPage:
+      type: object
+      required:
+        - content
+        - totalElements
+        - pageNumber
+        - pageSize
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+          description: Список товаров на текущей странице
+        totalElements:
+          type: integer
+          minimum: 0
+          description: Общее количество товаров, удовлетворяющих фильтрам
+          example: 150
+        pageNumber:
+          type: integer
+          minimum: 0
+          description: Номер текущей страницы (начиная с 0)
+          example: 0
+        pageSize:
+          type: integer
+          minimum: 1
+          description: Размер страницы
+          example: 20
+        totalPages:
+          type: integer
+          minimum: 0
+          description: Общее количество страниц
+          example: 8
+
+    Error:
+      type: object
+      required:
+        - timestamp
+        - status
+        - error
+        - message
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-03-04T14:30:00Z"
+        status:
+          type: integer
+          example: 404
+        error:
+          type: string
+          example: "Not Found"
+        message:
+          type: string
+          example: "Product with id 550e8400-e29b-41d4-a716-446655440000 not found"
+        path:
+          type: string
+          example: "/products/550e8400-e29b-41d4-a716-446655440000"
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT токен для аутентификации
+
+security:
+  - BearerAuth: []

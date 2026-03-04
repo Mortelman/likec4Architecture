@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Docker Compose Demo</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        h1 { color: #2c3e50; }
+        .card { background: #f0f4f8; border-radius: 8px; padding: 20px; margin: 10px 0; }
+        a { color: #3498db; }
+    </style>
+</head>
+<body>
+    <h1>Docker Compose — Пример 02</h1>
+    <div class="card">
+        <h2>Сервисы запущены!</h2>
+        <p>Это страница от <strong>nginx</strong> — статический веб-сервер.</p>
+        <p>Перейди на <a href="http://localhost:8081">http://localhost:8081</a> чтобы увидеть сервис <strong>whoami</strong>.</p>
+    </div>
+    <div class="card">
+        <h2>Что здесь происходит?</h2>
+        <ul>
+            <li>Docker Compose запустил два контейнера из одного файла</li>
+            <li>nginx отдаёт эту HTML страницу с хоста (bind mount)</li>
+            <li>whoami показывает заголовки запроса и информацию о контейнере</li>
+        </ul>
+    </div>
+</body>
+</html>

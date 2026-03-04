@@ -1,0 +1,15 @@
+services:
+  swagger-ui:
+    image: swaggerapi/swagger-ui
+    ports:
+      - "8080:8080"
+    environment:
+      # Показываем несколько API в одном UI
+      URLS: |
+        [
+          {"url": "/specs/users.yaml", "name": "Users API"},
+          {"url": "/specs/orders.yaml", "name": "Orders API"}
+        ]
+      URLS_PRIMARY_NAME: "Users API"
+    volumes:
+      - ./api:/usr/share/nginx/html/specs:ro
